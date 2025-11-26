@@ -13,7 +13,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     const isLoginPage = location.pathname === '/login';
 
     return (
-        <div className="min-h-screen w-full relative flex flex-col bg-slate-900 text-white overflow-hidden">
+        <div className="h-screen w-full relative flex flex-col bg-slate-900 text-white overflow-hidden">
             {/* Background Image */}
             <div
                 className="absolute inset-0 z-0 opacity-20 pointer-events-none"

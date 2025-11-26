@@ -43,7 +43,7 @@ export const AppLauncher: React.FC = () => {
     if (!app) return null;
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full min-h-[80vh]">
             <div className="flex items-center justify-between mb-4 bg-slate-800/50 p-3 rounded-lg border border-slate-700">
                 <div className="flex items-center gap-4">
                     <button
