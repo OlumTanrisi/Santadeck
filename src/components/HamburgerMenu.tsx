@@ -1,34 +1,37 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Menu, X, UserPlus, FileText, LogOut } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { Menu, X, FileText, LogOut, Users } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 export const HamburgerMenu: React.FC = () => {
     const [isOpen, setIsOpen] = useState(false);
     const navigate = useNavigate();
+    const { signOut, role } = useAuth();
 
     const handleLogout = async () => {
-        await supabase.auth.signOut();
+        await signOut();
         navigate('/login');
     };
 
     const menuItems = [
-        {
-            icon: UserPlus,
-            label: 'Criar Usuário',
-            onClick: async () => {
-                setIsOpen(false);
-                navigate('/create-user');
+        ...(role === 'admin' ? [
+            {
+                icon: Users,
+                label: 'Gerenciar Usuários',
+                onClick: async () => {
+                    setIsOpen(false);
+                    navigate('/manage-users');
+                }
             }
-        },
-        {
+        ] : []),
+        ...(role === 'admin' ? [{
             icon: FileText,
             label: 'Logs',
             onClick: async () => {
                 setIsOpen(false);
                 navigate('/logs');
             }
-        },
+        }] : []),
         {
             icon: LogOut,
             label: 'Sair',

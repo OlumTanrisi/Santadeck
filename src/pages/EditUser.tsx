@@ -1,31 +1,77 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { UserPlus, ArrowLeft } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { UserCog, ArrowLeft, Save } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 
 interface AppData {
     id: string;
     name: string;
 }
 
-export const CreateUser: React.FC = () => {
+
+
+export const EditUser: React.FC = () => {
     const navigate = useNavigate();
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
+    const { id } = useParams<{ id: string }>();
     const [fullName, setFullName] = useState('');
     const [role, setRole] = useState<'user' | 'admin'>('user');
     const [availableApps, setAvailableApps] = useState<AppData[]>([]);
     const [selectedApps, setSelectedApps] = useState<string[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     useEffect(() => {
-        fetchApps();
-    }, []);
+        if (id) {
+            fetchData();
+        }
+    }, [id]);
 
-    const fetchApps = async () => {
-        const { data } = await supabase.from('apps').select('id, name').order('name');
-        if (data) setAvailableApps(data);
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+
+            // Fetch Apps
+            const { data: appsData, error: appsError } = await supabase
+                .from('apps')
+                .select('id, name')
+                .order('name');
+
+            if (appsError) throw appsError;
+            setAvailableApps(appsData || []);
+
+            // Fetch User Profile
+            const { data: profileData, error: profileError } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', id)
+                .single();
+
+            if (profileError) throw profileError;
+
+            if (profileData) {
+                setFullName(profileData.full_name || '');
+                setRole(profileData.role as 'admin' | 'user');
+            }
+
+            // Fetch User Permissions
+            const { data: permData, error: permError } = await supabase
+                .from('user_app_permissions')
+                .select('app_id')
+                .eq('user_id', id);
+
+            if (permError) throw permError;
+
+            if (permData) {
+                setSelectedApps(permData.map(p => p.app_id));
+            }
+
+        } catch (error: any) {
+            console.error('Error fetching data:', error);
+            setMessage({ type: 'error', text: 'Erro ao carregar dados do usuário.' });
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleAppToggle = (appId: string) => {
@@ -36,50 +82,70 @@ export const CreateUser: React.FC = () => {
         );
     };
 
-    const handleCreateUser = async (e: React.FormEvent) => {
+    const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
+        setSaving(true);
         setMessage(null);
 
         try {
-            const { error } = await supabase.rpc('create_user_by_admin', {
-                email,
-                password,
-                full_name: fullName,
-                user_role: role,
-                app_ids: selectedApps
-            });
+            // Update Profile
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .update({ full_name: fullName, role })
+                .eq('id', id);
 
-            if (error) throw error;
+            if (profileError) throw profileError;
 
-            setMessage({ type: 'success', text: 'Usuário criado com sucesso!' });
-            setEmail('');
-            setPassword('');
-            setFullName('');
-            setRole('user');
-            setSelectedApps([]);
+            // Update Permissions
+            // First, delete existing
+            const { error: deleteError } = await supabase
+                .from('user_app_permissions')
+                .delete()
+                .eq('user_id', id);
+
+            if (deleteError) throw deleteError;
+
+            // Then insert new ones
+            if (selectedApps.length > 0) {
+                const { error: insertError } = await supabase
+                    .from('user_app_permissions')
+                    .insert(
+                        selectedApps.map(appId => ({
+                            user_id: id,
+                            app_id: appId
+                        }))
+                    );
+
+                if (insertError) throw insertError;
+            }
+
+            setMessage({ type: 'success', text: 'Usuário atualizado com sucesso!' });
         } catch (error: any) {
-            console.error('Error creating user:', error);
-            setMessage({ type: 'error', text: error.message || 'Erro ao criar usuário' });
+            console.error('Error updating user:', error);
+            setMessage({ type: 'error', text: error.message || 'Erro ao atualizar usuário' });
         } finally {
-            setLoading(false);
+            setSaving(false);
         }
     };
+
+    if (loading) {
+        return <div className="text-center text-white py-20">Carregando...</div>;
+    }
 
     return (
         <div className="w-full max-w-2xl mx-auto">
             <button
-                onClick={() => navigate('/dashboard')}
+                onClick={() => navigate('/manage-users')}
                 className="flex items-center gap-2 text-gray-300 hover:text-white mb-6 transition-colors"
             >
                 <ArrowLeft size={20} />
-                Voltar ao Dashboard
+                Voltar para Gerenciar Usuários
             </button>
 
             <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-2xl">
                 <div className="flex items-center gap-3 mb-6">
-                    <UserPlus size={32} className="text-primary" />
-                    <h2 className="text-3xl font-bold text-white">Criar Novo Usuário</h2>
+                    <UserCog size={32} className="text-primary" />
+                    <h2 className="text-3xl font-bold text-white">Editar Usuário</h2>
                 </div>
 
                 {message && (
@@ -93,7 +159,7 @@ export const CreateUser: React.FC = () => {
                     </div>
                 )}
 
-                <form onSubmit={handleCreateUser} className="space-y-6">
+                <form onSubmit={handleSave} className="space-y-6">
                     <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                             Nome Completo
@@ -104,36 +170,6 @@ export const CreateUser: React.FC = () => {
                             onChange={(e) => setFullName(e.target.value)}
                             className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:outline-none transition-all"
                             required
-                            placeholder="Digite o nome completo"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                            Email
-                        </label>
-                        <input
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:outline-none transition-all"
-                            required
-                            placeholder="usuario@exemplo.com"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                            Senha
-                        </label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:outline-none transition-all"
-                            required
-                            placeholder="Mínimo 6 caracteres"
-                            minLength={6}
                         />
                     </div>
 
@@ -178,10 +214,15 @@ export const CreateUser: React.FC = () => {
 
                     <button
                         type="submit"
-                        disabled={loading}
-                        className="w-full bg-primary hover:bg-red-700 text-white font-medium py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                        disabled={saving}
+                        className="w-full bg-primary hover:bg-red-700 text-white font-medium py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg flex items-center justify-center gap-2"
                     >
-                        {loading ? 'Criando...' : 'Criar Usuário'}
+                        {saving ? 'Salvando...' : (
+                            <>
+                                <Save size={20} />
+                                Salvar Alterações
+                            </>
+                        )}
                     </button>
                 </form>
             </div>
