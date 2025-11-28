@@ -79,6 +79,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const signOut = async () => {
+        // Log the logout activity before signing out
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                await supabase.from('activity_logs').insert({
+                    user_id: user.id,
+                    action: 'user_logout',
+                    app_id: null,
+                    app_name: null,
+                    details: {
+                        timestamp: new Date().toISOString()
+                    }
+                });
+            }
+        } catch (logError) {
+            console.error('Error logging logout activity:', logError);
+        }
+
         await supabase.auth.signOut();
         setRole(null);
         setSession(null);

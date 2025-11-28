@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Menu, X, FileText, LogOut, Users } from 'lucide-react';
+import { Menu, X, FileText, LogOut, Users, UserCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export const HamburgerMenu: React.FC = () => {
     const [isOpen, setIsOpen] = useState(false);
     const navigate = useNavigate();
-    const { signOut, role } = useAuth();
+    const { signOut, role, user } = useAuth();
 
     const handleLogout = async () => {
         await signOut();
@@ -76,6 +76,23 @@ export const HamburgerMenu: React.FC = () => {
                             <X size={24} />
                         </button>
                     </div>
+
+                    {/* User Profile Section */}
+                    {user && (
+                        <div className="flex items-center gap-3 mb-6 p-3 bg-slate-700/50 rounded-lg border border-slate-600">
+                            <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center text-primary shrink-0">
+                                <UserCircle size={24} />
+                            </div>
+                            <div className="flex flex-col overflow-hidden">
+                                <span className="text-sm font-bold text-white truncate">
+                                    {user.user_metadata?.full_name || 'Usuário'}
+                                </span>
+                                <span className="text-xs text-gray-400 truncate" title={user.email}>
+                                    {user.email}
+                                </span>
+                            </div>
+                        </div>
+                    )}
 
                     <nav className="space-y-2">
                         {menuItems.map((item, index) => {

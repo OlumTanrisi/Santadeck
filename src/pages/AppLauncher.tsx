@@ -16,6 +16,7 @@ export const AppLauncher: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [key, setKey] = useState(0);
     const [copied, setCopied] = useState(false);
+    const [iframeError, setIframeError] = useState(false);
 
     useEffect(() => {
         const fetchApp = async () => {
@@ -29,6 +30,21 @@ export const AppLauncher: React.FC = () => {
 
                 if (error) throw error;
                 setApp(data);
+
+                // Log the app access
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user && data) {
+                    await supabase.from('activity_logs').insert({
+                        user_id: user.id,
+                        action: 'app_opened',
+                        app_id: data.id,
+                        app_name: data.name,
+                        details: {
+                            url: data.url,
+                            timestamp: new Date().toISOString()
+                        }
+                    });
+                }
             } catch (error) {
                 console.error('Error fetching app:', error);
                 navigate('/dashboard');
@@ -39,6 +55,29 @@ export const AppLauncher: React.FC = () => {
 
         fetchApp();
     }, [id, navigate]);
+
+    // Detect if iframe is blocked after a short delay
+    useEffect(() => {
+        if (!app || isNetworkPath(app.url)) return;
+
+        const timer = setTimeout(() => {
+            const iframe = document.querySelector('iframe');
+            if (iframe) {
+                try {
+                    // Try to access iframe content - will throw error if blocked
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                    if (!iframeDoc) {
+                        setIframeError(true);
+                    }
+                } catch (e) {
+                    // Cross-origin or blocked
+                    setIframeError(true);
+                }
+            }
+        }, 2000); // Wait 2 seconds before checking
+
+        return () => clearTimeout(timer);
+    }, [app]);
 
     const isNetworkPath = (url: string) => {
         return url.startsWith('\\\\') || url.startsWith('//');
@@ -73,7 +112,7 @@ export const AppLauncher: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {!isNetwork && (
+                    {!isNetwork && !iframeError && (
                         <>
                             <button
                                 onClick={() => setKey(k => k + 1)}
@@ -82,107 +121,111 @@ export const AppLauncher: React.FC = () => {
                             >
                                 <RefreshCw size={18} />
                             </button>
-                            <a
-                                href={app.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-2 text-gray-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-                                title="Abrir em nova aba"
-                            >
-                                <ExternalLink size={18} />
-                            </a>
                         </>
                     )}
+                    <a
+                        href={app.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 text-gray-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                        title="Abrir em nova aba"
+                    >
+                        <ExternalLink size={18} />
+                    </a>
                 </div>
             </div>
 
             <div className="flex-1 bg-slate-800/50 rounded-xl overflow-hidden shadow-2xl relative border border-slate-700">
                 {isNetwork ? (
-                    <div className="flex items-center justify-center h-full p-8">
-                        <div className="max-w-2xl w-full bg-slate-800 border border-slate-700 rounded-2xl p-8 text-center">
-                            <div className="w-20 h-20 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-                                <FolderOpen size={40} className="text-blue-400" />
+                    <div className="flex items-center justify-center h-full p-4 overflow-y-auto">
+                        <div className="max-w-xl w-full bg-slate-800 border border-slate-700 rounded-xl p-6 text-center">
+                            <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <FolderOpen className="w-8 h-8 text-blue-400" />
                             </div>
 
-                            <h3 className="text-2xl font-bold text-white mb-4">Aplicativo de Rede</h3>
-                            <p className="text-gray-400 mb-6">
-                                Este aplicativo está localizado em uma pasta de rede. Siga os passos abaixo:
+                            <h3 className="text-lg font-bold text-white mb-2">Aplicativo de Rede</h3>
+                            <p className="text-sm text-gray-400 mb-4">
+                                Siga os passos abaixo para executar:
                             </p>
 
-                            <div className="bg-slate-900 border border-slate-600 rounded-lg p-4 mb-6">
-                                <p className="text-sm text-gray-400 mb-3 font-semibold">Caminho do aplicativo:</p>
-                                <div className="flex items-center justify-between gap-4 mb-4">
-                                    <code className="text-sm text-green-400 break-all flex-1 text-left bg-slate-950 p-3 rounded border border-slate-700">
+                            <div className="bg-slate-900 border border-slate-600 rounded-lg p-3 mb-4">
+                                <p className="text-xs text-gray-400 mb-2 font-medium">Caminho:</p>
+                                <div className="flex flex-col gap-2">
+                                    <code className="text-xs text-green-400 break-all text-left bg-slate-950 p-2 rounded border border-slate-700">
                                         {app.url}
                                     </code>
                                     <button
                                         onClick={handleCopyPath}
-                                        className="flex items-center gap-2 px-4 py-3 bg-primary hover:bg-red-700 text-white rounded-lg transition-colors whitespace-nowrap font-medium"
+                                        className="flex items-center justify-center gap-2 px-4 py-2 bg-primary hover:bg-red-700 text-white rounded-lg transition-colors font-medium text-sm"
                                     >
                                         {copied ? (
                                             <>
-                                                <CheckCircle size={18} />
+                                                <CheckCircle size={16} />
                                                 Copiado!
                                             </>
                                         ) : (
                                             <>
-                                                <Copy size={18} />
-                                                Copiar Caminho
+                                                <Copy size={16} />
+                                                Copiar
                                             </>
                                         )}
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="space-y-4 text-left mb-6">
-                                <div className="bg-slate-900/50 border border-slate-600 rounded-lg p-4">
-                                    <div className="flex items-start gap-3">
-                                        <span className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold flex-shrink-0 mt-1">1</span>
-                                        <div className="flex-1">
-                                            <h4 className="text-white font-semibold mb-2">Copie o caminho</h4>
-                                            <p className="text-gray-400 text-sm">Clique no botão "Copiar Caminho" acima</p>
-                                        </div>
+                            <div className="space-y-2 text-left mb-4">
+                                <div className="bg-slate-900/50 border border-slate-600 rounded-lg p-3">
+                                    <div className="flex items-start gap-2">
+                                        <span className="w-6 h-6 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold flex-shrink-0 text-xs">1</span>
+                                        <p className="text-xs text-gray-400 flex-1">Copie o caminho acima</p>
                                     </div>
                                 </div>
 
-                                <div className="bg-slate-900/50 border border-slate-600 rounded-lg p-4">
-                                    <div className="flex items-start gap-3">
-                                        <span className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold flex-shrink-0 mt-1">2</span>
-                                        <div className="flex-1">
-                                            <h4 className="text-white font-semibold mb-2">Abra o "Executar" do Windows</h4>
-                                            <p className="text-gray-400 text-sm mb-2">Pressione <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Win</kbd> + <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">R</kbd></p>
-                                            <p className="text-gray-500 text-xs">Ou pesquise por "Executar" no menu Iniciar</p>
-                                        </div>
+                                <div className="bg-slate-900/50 border border-slate-600 rounded-lg p-3">
+                                    <div className="flex items-start gap-2">
+                                        <span className="w-6 h-6 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold flex-shrink-0 text-xs">2</span>
+                                        <p className="text-xs text-gray-400 flex-1">Pressione <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-xs">Win+R</kbd></p>
                                     </div>
                                 </div>
 
-                                <div className="bg-slate-900/50 border border-slate-600 rounded-lg p-4">
-                                    <div className="flex items-start gap-3">
-                                        <span className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold flex-shrink-0 mt-1">3</span>
-                                        <div className="flex-1">
-                                            <h4 className="text-white font-semibold mb-2">Cole e execute</h4>
-                                            <p className="text-gray-400 text-sm mb-2">Cole o caminho (<kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Ctrl</kbd> + <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">V</kbd>) e pressione <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Enter</kbd></p>
-                                        </div>
+                                <div className="bg-slate-900/50 border border-slate-600 rounded-lg p-3">
+                                    <div className="flex items-start gap-2">
+                                        <span className="w-6 h-6 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold flex-shrink-0 text-xs">3</span>
+                                        <p className="text-xs text-gray-400 flex-1">Cole e pressione Enter</p>
                                     </div>
                                 </div>
-                            </div>
-
-                            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
-                                <p className="text-blue-300 text-sm font-semibold mb-2">💡 Dica Rápida:</p>
-                                <p className="text-gray-400 text-sm">
-                                    Você também pode colar o caminho diretamente na barra de endereços do Explorador de Arquivos (Win + E).
-                                </p>
                             </div>
                         </div>
                     </div>
+                ) : iframeError ? (
+                    <div className="flex items-center justify-center h-full p-4">
+                        <div className="max-w-md w-full bg-slate-800 border border-slate-700 rounded-xl p-6 text-center space-y-4">
+                            <div className="bg-slate-900 border border-slate-600 rounded-lg p-4">
+                                <p className="text-xs text-gray-400 mb-2 font-medium">URL do aplicativo:</p>
+                                <code className="text-sm text-green-400 break-all block bg-slate-950 p-3 rounded border border-slate-700">
+                                    {app.url}
+                                </code>
+                            </div>
+
+                            <a
+                                href={app.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 bg-primary hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors text-sm w-full justify-center"
+                            >
+                                <ExternalLink size={18} />
+                                Abrir em Nova Aba
+                            </a>
+                        </div>
+                    </div>
                 ) : (
-                    <div className="w-full h-full bg-white">
+                    <div className="w-full h-full bg-white relative">
                         <iframe
                             key={key}
                             src={app.url}
                             title={app.name}
                             className="w-full h-full border-0"
-                            sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
                         />
                     </div>
                 )}

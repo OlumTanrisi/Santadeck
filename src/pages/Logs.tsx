@@ -1,50 +1,59 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { FileText, ArrowLeft, User, Clock, Activity } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { FileText, User, Clock, Monitor } from 'lucide-react';
 
-interface LogEntry {
+interface ActivityLog {
     id: string;
-    created_at: string;
-    user_email: string;
+    user_id: string;
     action: string;
-    details?: string;
+    app_id: string | null;
+    app_name: string | null;
+    details: any;
+    created_at: string;
+    user_name?: string;
+    profiles: { full_name: string } | null; // Add profiles to the interface for type safety
 }
 
 export const Logs: React.FC = () => {
-    const navigate = useNavigate();
-    const [logs, setLogs] = useState<LogEntry[]>([]);
+    const [logs, setLogs] = useState<ActivityLog[]>([]);
     const [loading, setLoading] = useState(true);
+    const [filter, setFilter] = useState<'all' | 'app_opened' | 'user_login'>('all');
 
     useEffect(() => {
         fetchLogs();
-    }, []);
+    }, [filter]);
 
     const fetchLogs = async () => {
         try {
-            // For now, we'll create a simple logs display
-            // In a real implementation, you would fetch from a logs table
-            const { data: { user } } = await supabase.auth.getUser();
+            setLoading(true);
 
-            // Mock logs for demonstration
-            const mockLogs: LogEntry[] = [
-                {
-                    id: '1',
-                    created_at: new Date().toISOString(),
-                    user_email: user?.email || 'unknown',
-                    action: 'Login',
-                    details: 'Usuário fez login no sistema'
-                },
-                {
-                    id: '2',
-                    created_at: new Date(Date.now() - 3600000).toISOString(),
-                    user_email: user?.email || 'unknown',
-                    action: 'Visualizou Dashboard',
-                    details: 'Acessou a página principal'
-                }
-            ];
+            // Fetch logs with user information
+            let query = supabase
+                .from('activity_logs')
+                .select(`
+                    *,
+                    profiles:user_id (
+                        full_name
+                    )
+                `)
+                .order('created_at', { ascending: false })
+                .limit(100);
 
-            setLogs(mockLogs);
+            if (filter !== 'all') {
+                query = query.eq('action', filter);
+            }
+
+            const { data, error } = await query;
+
+            if (error) throw error;
+
+            // Transform data to include user name
+            const logsWithUserNames = data?.map(log => ({
+                ...log,
+                user_name: log.profiles?.full_name || 'Usuário Desconhecido'
+            })) || [];
+
+            setLogs(logsWithUserNames);
         } catch (error) {
             console.error('Error fetching logs:', error);
         } finally {
@@ -52,75 +61,134 @@ export const Logs: React.FC = () => {
         }
     };
 
+    const getActionLabel = (action: string) => {
+        switch (action) {
+            case 'app_opened':
+                return 'Abriu Aplicativo';
+            case 'user_login':
+                return 'Login';
+            case 'user_logout':
+                return 'Logout';
+            default:
+                return action;
+        }
+    };
+
+    const getActionColor = (action: string) => {
+        switch (action) {
+            case 'app_opened':
+                return 'bg-blue-500/20 text-blue-300 border-blue-500/50';
+            case 'user_login':
+                return 'bg-green-500/20 text-green-300 border-green-500/50';
+            case 'user_logout':
+                return 'bg-orange-500/20 text-orange-300 border-orange-500/50';
+            default:
+                return 'bg-gray-500/20 text-gray-300 border-gray-500/50';
+        }
+    };
+
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
-        return date.toLocaleString('pt-BR', {
+        return new Intl.DateTimeFormat('pt-BR', {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
             hour: '2-digit',
-            minute: '2-digit'
-        });
+            minute: '2-digit',
+            second: '2-digit'
+        }).format(date);
     };
 
     return (
-        <div className="w-full max-w-6xl mx-auto">
-            <button
-                onClick={() => navigate('/dashboard')}
-                className="flex items-center gap-2 text-gray-300 hover:text-white mb-6 transition-colors"
-            >
-                <ArrowLeft size={20} />
-                Voltar ao Dashboard
-            </button>
-
-            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-2xl">
-                <div className="flex items-center gap-3 mb-6">
+        <div className="w-full max-w-7xl mx-auto">
+            <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-3">
                     <FileText size={32} className="text-primary" />
-                    <h2 className="text-3xl font-bold text-white">Logs do Sistema</h2>
+                    <h2 className="text-3xl font-bold text-white">Logs de Atividade</h2>
                 </div>
 
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setFilter('all')}
+                        className={`px-4 py-2 rounded-lg transition-colors ${filter === 'all'
+                            ? 'bg-primary text-white'
+                            : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                            }`}
+                    >
+                        Todos
+                    </button>
+                    <button
+                        onClick={() => setFilter('app_opened')}
+                        className={`px-4 py-2 rounded-lg transition-colors ${filter === 'app_opened'
+                            ? 'bg-primary text-white'
+                            : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                            }`}
+                    >
+                        Apps Abertos
+                    </button>
+                </div>
+            </div>
+
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
                 {loading ? (
-                    <div className="text-center text-gray-400 py-12">
-                        Carregando logs...
-                    </div>
+                    <div className="text-center text-gray-400 py-12">Carregando logs...</div>
                 ) : logs.length === 0 ? (
-                    <div className="text-center text-gray-400 py-12">
-                        Nenhum log encontrado
-                    </div>
+                    <div className="text-center text-gray-400 py-12">Nenhum log encontrado.</div>
                 ) : (
-                    <div className="space-y-3">
-                        {logs.map((log) => (
-                            <div
-                                key={log.id}
-                                className="bg-slate-900 border border-slate-700 rounded-lg p-4 hover:border-slate-600 transition-colors"
-                            >
-                                <div className="flex items-start justify-between gap-4">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <Activity size={18} className="text-primary" />
-                                            <h3 className="text-white font-semibold">{log.action}</h3>
-                                        </div>
-
-                                        {log.details && (
-                                            <p className="text-gray-400 text-sm mb-2 ml-7">
-                                                {log.details}
-                                            </p>
-                                        )}
-
-                                        <div className="flex items-center gap-4 ml-7 text-xs text-gray-500">
-                                            <div className="flex items-center gap-1">
-                                                <User size={14} />
-                                                <span>{log.user_email}</span>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-slate-900/50 border-b border-slate-700">
+                                <tr>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                        Usuário
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                        Ação
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                        Aplicativo
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                        Data/Hora
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-700">
+                                {logs.map((log) => (
+                                    <tr key={log.id} className="hover:bg-slate-700/30 transition-colors">
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center gap-2">
+                                                <User size={16} className="text-gray-500" />
+                                                <span className="text-sm text-white font-medium">
+                                                    {log.user_name}
+                                                </span>
                                             </div>
-                                            <div className="flex items-center gap-1">
-                                                <Clock size={14} />
-                                                <span>{formatDate(log.created_at)}</span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getActionColor(log.action)}`}>
+                                                {getActionLabel(log.action)}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {log.app_name ? (
+                                                <div className="flex items-center gap-2">
+                                                    <Monitor size={16} className="text-gray-500" />
+                                                    <span className="text-sm text-gray-300">{log.app_name}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-sm text-gray-500">-</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center gap-2">
+                                                <Clock size={16} className="text-gray-500" />
+                                                <span className="text-sm text-gray-400">{formatDate(log.created_at)}</span>
                                             </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 )}
             </div>
