@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { FileText, User, Clock, Monitor } from 'lucide-react';
+import { FileText, User, Clock, Monitor, Link as LinkIcon, Trash2 } from 'lucide-react';
 
 interface ActivityLog {
     id: string;
@@ -17,7 +17,7 @@ interface ActivityLog {
 export const Logs: React.FC = () => {
     const [logs, setLogs] = useState<ActivityLog[]>([]);
     const [loading, setLoading] = useState(true);
-    const [filter, setFilter] = useState<'all' | 'app_opened' | 'user_login'>('all');
+    const [filter, setFilter] = useState<'all' | 'app_opened' | 'user_login' | 'app_audit'>('all');
 
     useEffect(() => {
         fetchLogs();
@@ -40,7 +40,11 @@ export const Logs: React.FC = () => {
                 .limit(100);
 
             if (filter !== 'all') {
-                query = query.eq('action', filter);
+                if (filter === 'app_audit') {
+                    query = query.in('action', ['app_created', 'app_updated', 'app_deleted']);
+                } else {
+                    query = query.eq('action', filter);
+                }
             }
 
             const { data, error } = await query;
@@ -61,7 +65,19 @@ export const Logs: React.FC = () => {
         }
     };
 
-    const getActionLabel = (action: string) => {
+    const getActionLabel = (log: ActivityLog) => {
+        const action = log.action;
+        const details = log.details || {};
+
+        // Determinar o tipo do item (app ou link)
+        let type = 'web'; // default
+        if (action === 'app_created') type = details.type;
+        else if (action === 'app_updated') type = details.new_data?.type;
+        else if (action === 'app_deleted') type = details.deleted_app?.type;
+
+        const isLink = type === 'link';
+        const itemLabel = isLink ? 'Link' : 'App';
+
         switch (action) {
             case 'app_opened':
                 return 'Abriu Aplicativo';
@@ -69,6 +85,12 @@ export const Logs: React.FC = () => {
                 return 'Login';
             case 'user_logout':
                 return 'Logout';
+            case 'app_created':
+                return `${itemLabel} Criado`;
+            case 'app_updated':
+                return `${itemLabel} Atualizado`;
+            case 'app_deleted':
+                return `${itemLabel} Excluído`;
             default:
                 return action;
         }
@@ -82,6 +104,12 @@ export const Logs: React.FC = () => {
                 return 'bg-green-500/20 text-green-300 border-green-500/50';
             case 'user_logout':
                 return 'bg-orange-500/20 text-orange-300 border-orange-500/50';
+            case 'app_created':
+                return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50';
+            case 'app_updated':
+                return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50';
+            case 'app_deleted':
+                return 'bg-red-500/20 text-red-300 border-red-500/50';
             default:
                 return 'bg-gray-500/20 text-gray-300 border-gray-500/50';
         }
@@ -126,6 +154,15 @@ export const Logs: React.FC = () => {
                     >
                         Apps Abertos
                     </button>
+                    <button
+                        onClick={() => setFilter('app_audit')}
+                        className={`px-4 py-2 rounded-lg transition-colors ${filter === 'app_audit'
+                            ? 'bg-primary text-white'
+                            : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                            }`}
+                    >
+                        Auditoria de Apps
+                    </button>
                 </div>
             </div>
 
@@ -166,14 +203,22 @@ export const Logs: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getActionColor(log.action)}`}>
-                                                {getActionLabel(log.action)}
+                                                {getActionLabel(log)}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
                                             {log.app_name ? (
                                                 <div className="flex items-center gap-2">
-                                                    <Monitor size={16} className="text-gray-500" />
-                                                    <span className="text-sm text-gray-300">{log.app_name}</span>
+                                                    {log.action === 'app_deleted' ? (
+                                                        <Trash2 size={16} className="text-red-400" />
+                                                    ) : log.details?.type === 'link' || log.details?.new_data?.type === 'link' ? (
+                                                        <LinkIcon size={16} className="text-blue-400" />
+                                                    ) : (
+                                                        <Monitor size={16} className="text-gray-500" />
+                                                    )}
+                                                    <span className={`text-sm ${log.action === 'app_deleted' ? 'text-red-400 line-through' : 'text-gray-300'}`}>
+                                                        {log.app_name}
+                                                    </span>
                                                 </div>
                                             ) : (
                                                 <span className="text-sm text-gray-500">-</span>

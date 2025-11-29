@@ -80,6 +80,9 @@ export const Dashboard: React.FC = () => {
         if (!editingAppId) return;
 
         try {
+            // Buscar dados antigos antes de atualizar
+            const oldApp = apps.find(a => a.id === editingAppId);
+
             const { error } = await supabase
                 .from('apps')
                 .update({
@@ -92,6 +95,33 @@ export const Dashboard: React.FC = () => {
                 .eq('id', editingAppId);
 
             if (error) throw error;
+
+            // Log da ação de editar app
+            if (user && oldApp) {
+                await supabase.from('activity_logs').insert({
+                    user_id: user.id,
+                    action: 'app_updated',
+                    app_id: editingAppId,
+                    app_name: editAppName,
+                    details: {
+                        old_data: {
+                            name: oldApp.name,
+                            description: oldApp.description,
+                            url: oldApp.url,
+                            icon_url: oldApp.icon_url,
+                            type: oldApp.type
+                        },
+                        new_data: {
+                            name: editAppName,
+                            description: editAppDesc,
+                            url: editAppUrl,
+                            icon_url: editAppIcon || null,
+                            type: editAppType
+                        },
+                        timestamp: new Date().toISOString()
+                    }
+                });
+            }
 
             setShowEditModal(false);
             setEditingAppId(null);
@@ -168,6 +198,23 @@ export const Dashboard: React.FC = () => {
 
             if (error) throw error;
 
+            // Log da ação de adicionar app
+            if (user) {
+                await supabase.from('activity_logs').insert({
+                    user_id: user.id,
+                    action: 'app_created',
+                    app_name: newAppName,
+                    details: {
+                        name: newAppName,
+                        description: newAppDesc,
+                        url: newAppUrl,
+                        icon_url: newAppIcon || null,
+                        type: appType,
+                        timestamp: new Date().toISOString()
+                    }
+                });
+            }
+
             setShowAddModal(false);
             setNewAppName('');
             setNewAppDesc('');
@@ -182,12 +229,36 @@ export const Dashboard: React.FC = () => {
 
     const handleDeleteApp = async (appId: string) => {
         try {
+            // Buscar dados do app antes de excluir
+            const appToDelete = apps.find(app => app.id === appId);
+
             const { error } = await supabase
                 .from('apps')
                 .delete()
                 .eq('id', appId);
 
             if (error) throw error;
+
+            // Log da ação de excluir app
+            if (user && appToDelete) {
+                await supabase.from('activity_logs').insert({
+                    user_id: user.id,
+                    action: 'app_deleted',
+                    app_id: null, // App foi deletado, não podemos referenciar o ID
+                    app_name: appToDelete.name,
+                    details: {
+                        original_app_id: appId, // Salvamos o ID nos detalhes para referência
+                        deleted_app: {
+                            name: appToDelete.name,
+                            description: appToDelete.description,
+                            url: appToDelete.url,
+                            icon_url: appToDelete.icon_url,
+                            type: appToDelete.type
+                        },
+                        timestamp: new Date().toISOString()
+                    }
+                });
+            }
 
             setApps(apps.filter(app => app.id !== appId));
             alert('Item excluído com sucesso!');
@@ -351,12 +422,13 @@ export const Dashboard: React.FC = () => {
                     <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
                         <button
                             onClick={() => setShowAddModal(false)}
-                            className="absolute top-4 right-4 text-gray-400 hover:text-white"
+                            className="absolute top-3 right-3 text-gray-400 hover:text-white p-3 hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+                            aria-label="Fechar"
                         >
                             <X size={24} />
                         </button>
 
-                        <h3 className="text-xl font-bold text-white mb-6">Novo Item</h3>
+                        <h3 className="text-xl font-bold text-white mb-6 pr-12 pointer-events-none">Novo App</h3>
 
                         <form onSubmit={handleAddApp} className="space-y-4">
                             <div>
