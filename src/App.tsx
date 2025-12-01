@@ -1,3 +1,13 @@
+/**
+ * Componente Principal da Aplicação - App.tsx
+ * 
+ * Este é o componente raiz que configura:
+ * - Roteamento da aplicação
+ * - Contexto de autenticação
+ * - Rotas protegidas
+ * - Redirecionamentos baseados em autenticação
+ */
+
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { MainLayout } from './layouts/MainLayout';
@@ -9,39 +19,68 @@ import { CreateUser } from './pages/CreateUser';
 import { ManageUsers } from './pages/ManageUsers';
 import { EditUser } from './pages/EditUser';
 import { Logs } from './pages/Logs';
+import { ChangePassword } from './pages/ChangePassword';
 
-// Protected Route Component
+/**
+ * Componente de Rota Protegida
+ * 
+ * Protege rotas que requerem autenticação e/ou permissões de admin.
+ * 
+ * @param children - Componentes filhos a serem renderizados se autorizado
+ * @param requireAdmin - Se true, requer que o usuário seja admin
+ * 
+ * Fluxo:
+ * 1. Verifica se está carregando dados de autenticação
+ * 2. Se não houver sessão, redireciona para login
+ * 3. Se requireAdmin=true e usuário não for admin, redireciona para dashboard
+ * 4. Se tudo OK, renderiza o conteúdo dentro do MainLayout
+ */
 const ProtectedRoute = ({ children, requireAdmin = false }: { children: React.ReactNode, requireAdmin?: boolean }) => {
   const { session, loading, role } = useAuth();
 
+  // Exibe loading enquanto verifica autenticação
   if (loading) {
     return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Carregando...</div>;
   }
 
+  // Redireciona para login se não estiver autenticado
   if (!session) {
     return <Navigate to="/login" />;
   }
 
+  // Redireciona para dashboard se não for admin mas a rota requer admin
   if (requireAdmin && role !== 'admin') {
     return <Navigate to="/dashboard" />;
   }
 
+  // Renderiza o conteúdo protegido dentro do layout
   return <MainLayout>{children}</MainLayout>;
 };
 
+/**
+ * Componente de Rotas da Aplicação
+ * 
+ * Define todas as rotas disponíveis e suas proteções.
+ * Usa o hook useAuth para verificar o estado de autenticação.
+ */
 function AppRoutes() {
   const { session } = useAuth();
 
   return (
     <Routes>
+      {/* Rota de Login - Redireciona para dashboard se já estiver logado */}
       <Route
         path="/login"
         element={!session ? <MainLayout><Login /></MainLayout> : <Navigate to="/dashboard" />}
       />
+
+      {/* Rota de Registro - Redireciona para dashboard se já estiver logado */}
       <Route
         path="/register"
         element={!session ? <MainLayout><Register /></MainLayout> : <Navigate to="/dashboard" />}
       />
+
+      {/* Dashboard - Rota protegida, acessível a todos os usuários autenticados */}
       <Route
         path="/dashboard"
         element={
@@ -50,6 +89,8 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* Criar Usuário - Rota protegida, apenas para admins */}
       <Route
         path="/create-user"
         element={
@@ -58,6 +99,8 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* Gerenciar Usuários - Rota protegida, apenas para admins */}
       <Route
         path="/manage-users"
         element={
@@ -66,6 +109,8 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* Editar Usuário - Rota protegida, apenas para admins */}
       <Route
         path="/edit-user/:id"
         element={
@@ -74,6 +119,8 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* Logs - Rota protegida, apenas para admins */}
       <Route
         path="/logs"
         element={
@@ -82,6 +129,8 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* Lançador de App - Rota protegida, acessível a todos os usuários autenticados */}
       <Route
         path="/app/:id"
         element={
@@ -90,11 +139,31 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* Alterar Senha - Rota protegida, acessível a todos os usuários autenticados */}
+      <Route
+        path="/change-password"
+        element={
+          <ProtectedRoute>
+            <ChangePassword />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Rota raiz - Redireciona baseado no estado de autenticação */}
       <Route path="/" element={<Navigate to={session ? "/dashboard" : "/login"} />} />
     </Routes>
   );
 }
 
+/**
+ * Componente App Principal
+ * 
+ * Envolve toda a aplicação com:
+ * - AuthProvider: Fornece contexto de autenticação global
+ * - Router: Habilita roteamento SPA
+ * - AppRoutes: Define todas as rotas da aplicação
+ */
 function App() {
   return (
     <AuthProvider>
@@ -106,3 +175,4 @@ function App() {
 }
 
 export default App;
+

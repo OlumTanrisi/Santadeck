@@ -1,44 +1,75 @@
+/**
+ * Página Dashboard - Dashboard.tsx
+ * 
+ * Página principal da aplicação onde os usuários visualizam e acessam seus aplicativos.
+ * 
+ * Funcionalidades:
+ * - Exibição de aplicativos em carrossel
+ * - Seção separada para links úteis
+ * - Adicionar/editar/excluir apps (apenas admins)
+ * - Controle de permissões por usuário
+ * - Navegação por indicadores (dots)
+ * - Scroll horizontal com mouse wheel
+ */
+
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { AppCard } from '../components/AppCard';
 import { Plus, X, ExternalLink, Link as LinkIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
+/**
+ * Interface que define a estrutura de dados de um aplicativo
+ */
 interface AppData {
-    id: string;
-    name: string;
-    description: string;
-    url: string;
-    icon_url?: string;
-    type?: 'web' | 'network' | 'link';
+    id: string;              // ID único do aplicativo
+    name: string;            // Nome do aplicativo
+    description: string;     // Descrição do aplicativo
+    url: string;             // URL ou caminho do aplicativo
+    icon_url?: string;       // URL do ícone (opcional)
+    type?: 'web' | 'link';   // Tipo: web app ou link útil
 }
 
+/**
+ * Componente Dashboard
+ * 
+ * Página principal que exibe todos os aplicativos disponíveis para o usuário.
+ * Admins veem todos os apps e podem gerenciá-los.
+ * Usuários comuns veem apenas apps para os quais têm permissão.
+ */
 export const Dashboard: React.FC = () => {
+    // Contexto de autenticação
     const { role, user } = useAuth();
-    const [apps, setApps] = useState<AppData[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [showAddModal, setShowAddModal] = useState(false);
 
-    // New App Form State
+    // Estados principais
+    const [apps, setApps] = useState<AppData[]>([]);           // Lista de aplicativos
+    const [loading, setLoading] = useState(true);              // Estado de carregamento
+    const [showAddModal, setShowAddModal] = useState(false);   // Controle do modal de adicionar
+
+    // Estados do formulário de novo app
     const [newAppName, setNewAppName] = useState('');
     const [newAppDesc, setNewAppDesc] = useState('');
     const [newAppUrl, setNewAppUrl] = useState('');
     const [newAppIcon, setNewAppIcon] = useState('');
-    const [appType, setAppType] = useState<'web' | 'network' | 'link'>('web');
+    const [appType, setAppType] = useState<'web' | 'link'>('web');
 
-    // Edit App State
+    // Estados do formulário de edição
     const [showEditModal, setShowEditModal] = useState(false);
     const [editingAppId, setEditingAppId] = useState<string | null>(null);
     const [editAppName, setEditAppName] = useState('');
     const [editAppDesc, setEditAppDesc] = useState('');
     const [editAppUrl, setEditAppUrl] = useState('');
     const [editAppIcon, setEditAppIcon] = useState('');
-    const [editAppType, setEditAppType] = useState<'web' | 'network' | 'link'>('web');
+    const [editAppType, setEditAppType] = useState<'web' | 'link'>('web');
 
-    // Carousel state
-    const [activeIndex, setActiveIndex] = useState(0);
-    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    // Estados do carrossel
+    const [activeIndex, setActiveIndex] = useState(0);                    // Índice do card ativo
+    const scrollContainerRef = useRef<HTMLDivElement>(null);              // Referência ao container de scroll
 
+    /**
+     * Handler de scroll do carrossel
+     * Atualiza o índice ativo baseado na posição do scroll
+     */
     const handleScroll = () => {
         if (scrollContainerRef.current) {
             const container = scrollContainerRef.current;
@@ -48,6 +79,7 @@ export const Dashboard: React.FC = () => {
             const index = Math.round(scrollLeft / (cardWidth + gap));
             setActiveIndex(Math.min(index, myApps.length - 1));
         }
+
     };
 
     const scrollToIndex = (index: number) => {
@@ -70,7 +102,7 @@ export const Dashboard: React.FC = () => {
             setEditAppDesc(app.description || '');
             setEditAppUrl(app.url);
             setEditAppIcon(app.icon_url || '');
-            setEditAppType(app.type || 'web');
+            setEditAppType(app.type === 'link' ? 'link' : 'web');
             setShowEditModal(true);
         }
     };
@@ -454,7 +486,7 @@ export const Dashboard: React.FC = () => {
 
                             <div>
                                 <label className="block text-sm text-gray-300 mb-2">Tipo</label>
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-2 gap-3">
                                     <label className={`flex flex-col items-center justify-center p-3 rounded-lg border cursor-pointer transition-all ${appType === 'web' ? 'bg-primary/20 border-primary text-white' : 'bg-slate-900 border-slate-700 text-gray-400 hover:bg-slate-800'}`}>
                                         <input
                                             type="radio"
@@ -465,17 +497,6 @@ export const Dashboard: React.FC = () => {
                                             className="hidden"
                                         />
                                         <span className="font-medium text-sm">App Web</span>
-                                    </label>
-                                    <label className={`flex flex-col items-center justify-center p-3 rounded-lg border cursor-pointer transition-all ${appType === 'network' ? 'bg-primary/20 border-primary text-white' : 'bg-slate-900 border-slate-700 text-gray-400 hover:bg-slate-800'}`}>
-                                        <input
-                                            type="radio"
-                                            name="appType"
-                                            value="network"
-                                            checked={appType === 'network'}
-                                            onChange={() => setAppType('network')}
-                                            className="hidden"
-                                        />
-                                        <span className="font-medium text-sm">App Rede</span>
                                     </label>
                                     <label className={`flex flex-col items-center justify-center p-3 rounded-lg border cursor-pointer transition-all ${appType === 'link' ? 'bg-primary/20 border-primary text-white' : 'bg-slate-900 border-slate-700 text-gray-400 hover:bg-slate-800'}`}>
                                         <input
@@ -493,14 +514,14 @@ export const Dashboard: React.FC = () => {
 
                             <div>
                                 <label className="block text-sm text-gray-300 mb-1">
-                                    {appType === 'network' ? 'Caminho de Rede' : 'URL'}
+                                    URL
                                 </label>
                                 <input
                                     type="text"
                                     value={newAppUrl}
                                     onChange={e => setNewAppUrl(e.target.value)}
                                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-primary focus:outline-none"
-                                    placeholder={appType === 'network' ? '\\\\servidor\\app.exe' : 'https://...'}
+                                    placeholder="https://..."
                                     required
                                 />
                             </div>
@@ -573,7 +594,7 @@ export const Dashboard: React.FC = () => {
 
                             <div>
                                 <label className="block text-sm text-gray-300 mb-2">Tipo</label>
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-2 gap-3">
                                     <label className={`flex flex-col items-center justify-center p-3 rounded-lg border cursor-pointer transition-all ${editAppType === 'web' ? 'bg-primary/20 border-primary text-white' : 'bg-slate-900 border-slate-700 text-gray-400 hover:bg-slate-800'}`}>
                                         <input
                                             type="radio"
@@ -584,17 +605,6 @@ export const Dashboard: React.FC = () => {
                                             className="hidden"
                                         />
                                         <span className="font-medium text-sm">App Web</span>
-                                    </label>
-                                    <label className={`flex flex-col items-center justify-center p-3 rounded-lg border cursor-pointer transition-all ${editAppType === 'network' ? 'bg-primary/20 border-primary text-white' : 'bg-slate-900 border-slate-700 text-gray-400 hover:bg-slate-800'}`}>
-                                        <input
-                                            type="radio"
-                                            name="editAppType"
-                                            value="network"
-                                            checked={editAppType === 'network'}
-                                            onChange={() => setEditAppType('network')}
-                                            className="hidden"
-                                        />
-                                        <span className="font-medium text-sm">App Rede</span>
                                     </label>
                                     <label className={`flex flex-col items-center justify-center p-3 rounded-lg border cursor-pointer transition-all ${editAppType === 'link' ? 'bg-primary/20 border-primary text-white' : 'bg-slate-900 border-slate-700 text-gray-400 hover:bg-slate-800'}`}>
                                         <input
@@ -612,14 +622,14 @@ export const Dashboard: React.FC = () => {
 
                             <div>
                                 <label className="block text-sm text-gray-300 mb-1">
-                                    {editAppType === 'network' ? 'Caminho de Rede' : 'URL'}
+                                    URL
                                 </label>
                                 <input
                                     type="text"
                                     value={editAppUrl}
                                     onChange={e => setEditAppUrl(e.target.value)}
                                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-primary focus:outline-none"
-                                    placeholder={editAppType === 'network' ? '\\\\servidor\\app.exe' : 'https://...'}
+                                    placeholder="https://..."
                                     required
                                 />
                             </div>
