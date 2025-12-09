@@ -20,6 +20,7 @@ import { ManageUsers } from './pages/ManageUsers';
 import { EditUser } from './pages/EditUser';
 import { Logs } from './pages/Logs';
 import { ChangePassword } from './pages/ChangePassword';
+import { ManageDepartments } from './pages/ManageDepartments';
 
 /**
  * Componente de Rota Protegida
@@ -146,6 +147,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <ChangePassword />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Gerenciar Setores - Rota protegida, apenas para admins */}
+      <Route
+        path="/manage-departments"
+        element={
+          <ProtectedRoute requireAdmin={true}>
+            <ManageDepartments />
           </ProtectedRoute>
         }
       />

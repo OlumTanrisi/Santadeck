@@ -6,7 +6,7 @@
  * Registra a atividade de login no banco de dados.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import logo from '../assets/logo.png';
@@ -30,6 +30,27 @@ export const Login: React.FC = () => {
 
     const navigate = useNavigate();
 
+    // Verifica mensagens de erro persistidas no localStorage
+    useEffect(() => {
+        const checkMessage = () => {
+            const message = localStorage.getItem('login_message');
+            if (message) {
+                setError(message);
+                localStorage.removeItem('login_message');
+                return true;
+            }
+            return false;
+        };
+
+        // Verificar imediatamente
+        if (!checkMessage()) {
+            // Se não encontrou, verificar novamente após um curto delay
+            // (para casos onde o signOut causa re-render)
+            const timer = setTimeout(checkMessage, 100);
+            return () => clearTimeout(timer);
+        }
+    }, []);
+
     /**
      * Handler do formulário de login
      * 
@@ -48,35 +69,111 @@ export const Login: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        // Tentar fazer login com Supabase Auth
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-        });
+        // Limpar mensagens residuais de sessões anteriores
+        localStorage.removeItem('login_message');
 
-        if (error) {
-            // Se houver erro, exibe mensagem
-            setError(error.message);
-            setLoading(false);
-        } else if (data.user) {
-            // Se login bem-sucedido, registra log de atividade
-            try {
-                await supabase.from('activity_logs').insert({
+        try {
+            // 1. Tentar fazer login com Supabase Auth
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
+
+            if (error) throw error;
+
+            if (data.user) {
+                // 2. Verificar se o usuário está ativo e se já tem sessão ativa
+                const { data: profile, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('is_active, current_session_id')
+                    .eq('id', data.user.id)
+                    .single();
+
+                console.log('📋 DEBUG - Profile:', profile);
+                console.log('📋 DEBUG - current_session_id:', profile?.current_session_id);
+                console.log('📋 DEBUG - Erro perfil:', profileError);
+
+                if (profileError) {
+                    console.error('Erro ao verificar perfil:', profileError);
+                }
+
+                // Verificar se conta está inativa
+                if (profile && profile.is_active === false) {
+                    setError('Sua conta está inativa. Entre em contato com o administrador.');
+                    await supabase.auth.signOut();
+                    setLoading(false);
+                    return;
+                }
+
+                // 3. Verificar Sessão Única - BLOQUEAR se já está logado em outro dispositivo
+                if (profile && profile.current_session_id) {
+                    console.log('⚠️ BLOQUEANDO - Conta já possui sessão ativa:', profile.current_session_id);
+                    // Salvar mensagem ANTES do signOut (para persistir em caso de re-render)
+                    localStorage.setItem('login_message', '⚠️ Esta conta já está conectada em outro dispositivo. Faça logout no outro dispositivo para continuar.');
+                    // Cancelar apenas esta sessão local (não afeta outros dispositivos)
+                    await supabase.auth.signOut({ scope: 'local' });
+                    // Também tentar setar diretamente
+                    setError('⚠️ Esta conta já está conectada em outro dispositivo. Faça logout no outro dispositivo para continuar.');
+                    setLoading(false);
+                    return;
+                }
+
+                console.log('✅ Nenhuma sessão ativa encontrada, prosseguindo com login...');
+
+                // 4. Se não tem sessão ativa, criar uma nova
+                const generateUUID = () => {
+                    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+                        const r = Math.random() * 16 | 0;
+                        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                        return v.toString(16);
+                    });
+                };
+                const sessionId = generateUUID();
+                console.log('🔐 Novo Session ID gerado:', sessionId);
+
+                // Salvar sessão no banco de dados
+                const { error: updateError } = await supabase
+                    .from('profiles')
+                    .update({ current_session_id: sessionId })
+                    .eq('id', data.user.id);
+
+                if (updateError) {
+                    console.error('❌ Erro ao salvar sessão:', updateError);
+                } else {
+                    console.log('✅ Session ID salvo no banco de dados');
+                }
+
+                // Salvar no localStorage
+                localStorage.setItem('santadeck_session_id', sessionId);
+                console.log('💾 Session ID salvo no localStorage');
+
+                // 5. Registrar log de atividade
+                const { error: logError } = await supabase.from('activity_logs').insert({
                     user_id: data.user.id,
                     action: 'user_login',
                     app_id: null,
                     app_name: null,
                     details: {
                         email: data.user.email,
-                        timestamp: new Date().toISOString()
+                        timestamp: new Date().toISOString(),
+                        session_id: sessionId
                     }
                 });
-            } catch (logError) {
-                console.error('Error logging activity:', logError);
-            }
 
-            // Redireciona para dashboard
-            navigate('/dashboard');
+                if (logError) {
+                    console.error('❌ Erro ao registrar log de login:', logError);
+                } else {
+                    console.log('✅ Log de login registrado com sucesso');
+                }
+
+                // 6. Redireciona para dashboard
+                console.log('🚀 Redirecionando para dashboard...');
+                navigate('/dashboard');
+            }
+        } catch (error: any) {
+            console.error('Login error:', error);
+            setError(error.message || 'Erro ao realizar login');
+            setLoading(false);
         }
     };
 

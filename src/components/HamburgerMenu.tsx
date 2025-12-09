@@ -10,7 +10,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Menu, X, FileText, LogOut, Users, UserCircle, Lock } from 'lucide-react';
+import { Menu, X, FileText, LogOut, Users, UserCircle, Lock, Building2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 /**
@@ -56,6 +56,18 @@ export const HamburgerMenu: React.FC = () => {
                 onClick: async () => {
                     setIsOpen(false);
                     navigate('/manage-users');
+                }
+            }
+        ] : []),
+
+        // Opção "Gerenciar Setores" - apenas para admins
+        ...(role === 'admin' ? [
+            {
+                icon: Building2,
+                label: 'Gerenciar Setores',
+                onClick: async () => {
+                    setIsOpen(false);
+                    navigate('/manage-departments');
                 }
             }
         ] : []),
@@ -143,13 +155,16 @@ export const HamburgerMenu: React.FC = () => {
                                 <span className="text-xs text-gray-400 truncate" title={user.email}>
                                     {user.email}
                                 </span>
+                                <span className="text-[10px] text-primary uppercase font-bold mt-1">
+                                    {role === 'admin' ? 'ADMINISTRADOR' : 'USUÁRIO'}
+                                </span>
                             </div>
                         </div>
                     )}
 
                     {/* Navegação - Itens do Menu */}
                     <nav className="space-y-2">
-                        {menuItems.map((item, index) => {
+                        {menuItems.filter(item => item.label !== 'Gerenciar Setores').map((item, index) => {
                             const Icon = item.icon;
                             return (
                                 <button

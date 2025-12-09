@@ -90,40 +90,74 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, []);
 
     /**
+     * Verifica a validade da sessão atual
+     * 
+     * Checa apenas se o usuário ainda está ativo
+     * (A verificação de sessão única agora é feita no login)
+     */
+    const checkSessionValidity = async () => {
+        try {
+            const { data: { user: currentUser }, error } = await supabase.auth.getUser();
+
+            if (error || !currentUser) return;
+
+            // Verificar se conta está ativa
+            const { data: profile, error: profileError } = await supabase
+                .from('profiles')
+                .select('is_active')
+                .eq('id', currentUser.id)
+                .single();
+
+            if (profileError) {
+                console.error('Erro ao buscar perfil:', profileError);
+                return;
+            }
+
+            if (profile && profile.is_active === false) {
+                console.log('⚠️ Usuário inativo - forçando logout');
+                localStorage.setItem('login_message', 'Sua conta foi inativada pelo administrador.');
+                await signOut();
+            }
+
+        } catch (err) {
+            console.error('Erro ao verificar validade da sessão:', err);
+        }
+    };
+
+    // Configurar verificação periódica de conta ativa
+    useEffect(() => {
+        // Verificar a cada 30 segundos se a conta ainda está ativa
+        const interval = setInterval(() => {
+            if (session) {
+                checkSessionValidity();
+            }
+        }, 30000);
+
+        return () => clearInterval(interval);
+    }, [session]);
+
+    /**
      * Busca a role (função) do usuário no banco de dados
      * 
      * @param userId - ID do usuário
-     * 
-     * Também verifica se a conta está ativa. Se não estiver,
-     * faz logout automático e exibe mensagem.
      */
     const fetchUserRole = async (userId: string) => {
         try {
-            console.log('Buscando role para usuário:', userId);
             const { data, error } = await supabase
                 .from('profiles')
-                .select('role, is_active')
+                .select('role')
                 .eq('id', userId)
                 .single();
 
-            console.log('Resultado fetchUserRole:', { data, error });
-
             if (error) {
                 console.error('Error fetching role:', error);
-                setRole('user'); // Fallback para 'user' em caso de erro
+                setRole('user');
             } else {
-                // Verificar se a conta está ativa
-                if (data.is_active === false) {
-                    await signOut();
-                    alert('Sua conta foi inativada. Entre em contato com o administrador.');
-                    return;
-                }
-                console.log('Definindo role como:', data?.role);
                 setRole(data?.role as 'admin' | 'user');
             }
         } catch (err) {
             console.error('Error in fetchUserRole:', err);
-            setRole('user'); // Fallback para 'user' em caso de erro
+            setRole('user');
         } finally {
             setLoading(false);
         }
@@ -133,15 +167,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
      * Função de Logout
      * 
      * Realiza as seguintes ações:
-     * 1. Registra log de logout no banco
-     * 2. Faz logout no Supabase
-     * 3. Limpa estados locais
+     * 1. Limpa a sessão no banco de dados
+     * 2. Registra log de logout no banco
+     * 3. Faz logout no Supabase
+     * 4. Limpa estados locais
      */
     const signOut = async () => {
-        // Registrar log de logout antes de sair
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
+                // 1. Limpar current_session_id no banco (permite novo login)
+                await supabase
+                    .from('profiles')
+                    .update({ current_session_id: null })
+                    .eq('id', user.id);
+
+                console.log('✅ Sessão limpa no banco de dados');
+
+                // 2. Registrar log de logout
                 await supabase.from('activity_logs').insert({
                     user_id: user.id,
                     action: 'user_logout',
@@ -153,13 +196,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 });
             }
         } catch (logError) {
-            console.error('Error logging logout activity:', logError);
+            console.error('Error during logout:', logError);
         }
 
-        // Fazer logout no Supabase
+        // 3. Limpar localStorage
+        localStorage.removeItem('santadeck_session_id');
+
+        // 4. Fazer logout no Supabase
         await supabase.auth.signOut();
 
-        // Limpar estados locais
+        // 5. Limpar estados locais
         setRole(null);
         setSession(null);
         setUser(null);
