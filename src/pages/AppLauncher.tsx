@@ -16,7 +16,6 @@ export const AppLauncher: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [key, setKey] = useState(0);
     const [copied, setCopied] = useState(false);
-    const [iframeError, setIframeError] = useState(false);
 
     useEffect(() => {
         const fetchApp = async () => {
@@ -56,29 +55,6 @@ export const AppLauncher: React.FC = () => {
         fetchApp();
     }, [id, navigate]);
 
-    // Detect if iframe is blocked after a short delay
-    useEffect(() => {
-        if (!app || isNetworkPath(app.url)) return;
-
-        const timer = setTimeout(() => {
-            const iframe = document.querySelector('iframe');
-            if (iframe) {
-                try {
-                    // Try to access iframe content - will throw error if blocked
-                    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-                    if (!iframeDoc) {
-                        setIframeError(true);
-                    }
-                } catch (e) {
-                    // Cross-origin or blocked
-                    setIframeError(true);
-                }
-            }
-        }, 2000); // Wait 2 seconds before checking
-
-        return () => clearTimeout(timer);
-    }, [app]);
-
     const isNetworkPath = (url: string) => {
         return url.startsWith('\\\\') || url.startsWith('//');
     };
@@ -112,7 +88,7 @@ export const AppLauncher: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {!isNetwork && !iframeError && (
+                    {!isNetwork && (
                         <>
                             <button
                                 onClick={() => setKey(k => k + 1)}
@@ -195,27 +171,6 @@ export const AppLauncher: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                ) : iframeError ? (
-                    <div className="flex items-center justify-center h-full p-4">
-                        <div className="max-w-md w-full bg-slate-800 border border-slate-700 rounded-xl p-6 text-center space-y-4">
-                            <div className="bg-slate-900 border border-slate-600 rounded-lg p-4">
-                                <p className="text-xs text-gray-400 mb-2 font-medium">URL do aplicativo:</p>
-                                <code className="text-sm text-green-400 break-all block bg-slate-950 p-3 rounded border border-slate-700">
-                                    {app.url}
-                                </code>
-                            </div>
-
-                            <a
-                                href={app.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 bg-primary hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors text-sm w-full justify-center"
-                            >
-                                <ExternalLink size={18} />
-                                Abrir em Nova Aba
-                            </a>
                         </div>
                     </div>
                 ) : (

@@ -76,6 +76,13 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             <main className="relative z-0 flex-1 flex flex-col p-6 overflow-auto">
                 {children}
             </main>
+
+            {/* Marca d'água / Copyright */}
+            <footer className="relative z-10 py-2 text-center">
+                <p className="text-xs text-gray-500 tracking-wide">
+                    IMOBILIÁRIA SANTAMÉRICA LTDA © 2025
+                </p>
+            </footer>
         </div>
     );
 };
