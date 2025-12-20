@@ -4,12 +4,16 @@
  * Página de autenticação de usuários.
  * Permite que usuários façam login com email e senha.
  * Registra a atividade de login no banco de dados.
+ * 
+ * ATUALIZADO: Agora também cria sessão no BFF para apps secundários
+ * e suporta redirect de volta para apps como /inventario após login.
  */
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import logo from '../assets/logo.png';
+import { createBFFSession, getRedirectPath } from '../lib/bff-session';
 
 /**
  * Componente Login
@@ -166,9 +170,38 @@ export const Login: React.FC = () => {
                     console.log('✅ Log de login registrado com sucesso');
                 }
 
-                // 6. Redireciona para dashboard
-                console.log('🚀 Redirecionando para dashboard...');
-                navigate('/dashboard');
+                // 6. Criar sessão no BFF para apps secundários
+                // Isso cria o cookie HttpOnly que será usado por Inventário, CRM, etc.
+                try {
+                    const accessToken = data.session?.access_token;
+                    if (accessToken) {
+                        const bffResult = await createBFFSession(
+                            data.user.id,
+                            data.user.email || '',
+                            accessToken
+                        );
+                        if (bffResult.success) {
+                            console.log('✅ Sessão BFF criada com sucesso');
+                        } else {
+                            console.warn('⚠️ Falha ao criar sessão BFF:', bffResult.error);
+                            // Não bloqueia o login, apenas loga o erro
+                        }
+                    }
+                } catch (bffError) {
+                    console.error('❌ Erro ao criar sessão BFF:', bffError);
+                    // Não bloqueia o login principal
+                }
+
+                // 7. Verificar se há redirect para app secundário (ex: /inventario)
+                const redirectPath = getRedirectPath();
+                if (redirectPath) {
+                    console.log('🔄 Redirecionando para app secundário:', redirectPath);
+                    window.location.href = redirectPath;
+                } else {
+                    // 8. Redireciona para dashboard (comportamento padrão)
+                    console.log('🚀 Redirecionando para dashboard...');
+                    navigate('/dashboard');
+                }
             }
         } catch (error: any) {
             console.error('Login error:', error);

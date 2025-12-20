@@ -13,6 +13,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { destroyBFFSession } from '../lib/bff-session';
 
 /**
  * Interface que define o tipo do contexto de autenticação
@@ -169,8 +170,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
      * Realiza as seguintes ações:
      * 1. Limpa a sessão no banco de dados
      * 2. Registra log de logout no banco
-     * 3. Faz logout no Supabase
-     * 4. Limpa estados locais
+     * 3. Limpa sessão do BFF (cookie HttpOnly para apps secundários)
+     * 4. Limpa localStorage
+     * 5. Faz logout no Supabase
+     * 6. Limpa estados locais
      */
     const signOut = async () => {
         try {
@@ -199,13 +202,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.error('Error during logout:', logError);
         }
 
-        // 3. Limpar localStorage
+        // 3. Destruir sessão do BFF (cookie HttpOnly para apps secundários)
+        try {
+            await destroyBFFSession();
+            console.log('✅ Sessão BFF destruída');
+        } catch (bffError) {
+            console.error('Erro ao destruir sessão BFF:', bffError);
+            // Não bloqueia o logout principal
+        }
+
+        // 4. Limpar localStorage
         localStorage.removeItem('santadeck_session_id');
 
-        // 4. Fazer logout no Supabase
+        // 5. Fazer logout no Supabase
         await supabase.auth.signOut();
 
-        // 5. Limpar estados locais
+        // 6. Limpar estados locais
         setRole(null);
         setSession(null);
         setUser(null);

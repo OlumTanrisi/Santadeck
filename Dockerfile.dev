@@ -1,0 +1,12 @@
+FROM node:20-alpine
+WORKDIR /app
+
+# Copia APENAS package.json (ignora lockfile do Windows para evitar erros de plataforma)
+COPY package.json ./
+
+# Instala dependencias do zero (gera lockfile novo na memoria compativel com Linux)
+RUN npm install
+
+COPY . .
+EXPOSE 5173
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
