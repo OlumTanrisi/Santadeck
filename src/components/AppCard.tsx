@@ -20,7 +20,9 @@ interface AppData {
     id: string;          // ID único do aplicativo
     name: string;        // Nome do aplicativo
     description: string; // Descrição do aplicativo
+    url: string;         // URL do aplicativo
     icon_url?: string;   // URL do ícone (opcional)
+    type?: 'web' | 'link' | 'external'; // Tipo do aplicativo
 }
 
 /**
@@ -55,7 +57,11 @@ export const AppCard: React.FC<AppCardProps> = ({ app, isAdmin, onDelete, onEdit
      * Navega para a página de lançamento do aplicativo
      */
     const handleCardClick = () => {
-        navigate(`/app/${app.id}`);
+        if (app.type === 'external') {
+            window.open(app.url, '_blank');
+        } else {
+            navigate(`/app/${app.id}`);
+        }
     };
 
     /**

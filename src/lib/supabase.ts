@@ -7,12 +7,10 @@
 import { createClient } from '@supabase/supabase-js';
 
 // URL do projeto Supabase
-const supabaseUrl = 'https://mlisanvuyijiniskofoq.supabase.co';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
 // Chave anônima (pública) do Supabase
-// Esta chave é segura para usar no frontend, pois as regras de segurança (RLS)
-// no banco de dados controlam o acesso aos dados.
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1saXNhbnZ1eWlqaW5pc2tvZm9xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ3NjI3NjAsImV4cCI6MjA4MDMzODc2MH0.vCiIrtKAKBMqCwtfqObgq5w9dwndzQ_jE2e-D1l2RCE';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 /**
  * Instância do cliente Supabase

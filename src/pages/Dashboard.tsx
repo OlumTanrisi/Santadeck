@@ -17,6 +17,7 @@ import { supabase } from '../lib/supabase';
 import { AppCard } from '../components/AppCard';
 import { Plus, X, ExternalLink, Link as LinkIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import toast from 'react-hot-toast';
 
 /**
  * Interface que define a estrutura de dados de um aplicativo
@@ -27,7 +28,7 @@ interface AppData {
     description: string;     // Descrição do aplicativo
     url: string;             // URL ou caminho do aplicativo
     icon_url?: string;       // URL do ícone (opcional)
-    type?: 'web' | 'link';   // Tipo: web app ou link útil
+    type?: 'web' | 'link' | 'external';   // Tipo: web app, link útil ou app externo
 }
 
 /**
@@ -51,7 +52,7 @@ export const Dashboard: React.FC = () => {
     const [newAppDesc, setNewAppDesc] = useState('');
     const [newAppUrl, setNewAppUrl] = useState('');
     const [newAppIcon, setNewAppIcon] = useState('');
-    const [appType, setAppType] = useState<'web' | 'link'>('web');
+    const [appType, setAppType] = useState<'web' | 'link' | 'external'>('web');
 
     // Estados do formulário de edição
     const [showEditModal, setShowEditModal] = useState(false);
@@ -60,7 +61,7 @@ export const Dashboard: React.FC = () => {
     const [editAppDesc, setEditAppDesc] = useState('');
     const [editAppUrl, setEditAppUrl] = useState('');
     const [editAppIcon, setEditAppIcon] = useState('');
-    const [editAppType, setEditAppType] = useState<'web' | 'link'>('web');
+    const [editAppType, setEditAppType] = useState<'web' | 'link' | 'external'>('web');
 
     // Estados do carrossel
     const [activeIndex, setActiveIndex] = useState(0);                    // Índice do card ativo
@@ -102,7 +103,7 @@ export const Dashboard: React.FC = () => {
             setEditAppDesc(app.description || '');
             setEditAppUrl(app.url);
             setEditAppIcon(app.icon_url || '');
-            setEditAppType(app.type === 'link' ? 'link' : 'web');
+            setEditAppType((app.type as any) || 'web');
             setShowEditModal(true);
         }
     };
@@ -163,9 +164,9 @@ export const Dashboard: React.FC = () => {
             setEditAppIcon('');
             setEditAppType('web');
             fetchApps();
-            alert('App atualizado com sucesso!');
+            toast.success('App atualizado com sucesso!');
         } catch (error) {
-            alert('Erro ao atualizar app: ' + (error as any).message);
+            toast.error('Erro ao atualizar app: ' + (error as any).message);
         }
     };
 
@@ -254,8 +255,9 @@ export const Dashboard: React.FC = () => {
             setNewAppIcon('');
             setAppType('web');
             fetchApps();
+            toast.success('App adicionado com sucesso!');
         } catch (error) {
-            alert('Erro ao adicionar app: ' + (error as any).message);
+            toast.error('Erro ao adicionar app: ' + (error as any).message);
         }
     };
 
@@ -293,10 +295,10 @@ export const Dashboard: React.FC = () => {
             }
 
             setApps(apps.filter(app => app.id !== appId));
-            alert('Item excluído com sucesso!');
+            toast.success('Item excluído com sucesso!');
         } catch (error) {
             console.error('Error deleting app:', error);
-            alert('Erro ao excluir item: ' + (error as any).message);
+            toast.error('Erro ao excluir item: ' + (error as any).message);
         }
     };
 
@@ -509,6 +511,17 @@ export const Dashboard: React.FC = () => {
                                         />
                                         <span className="font-medium text-sm">Link Útil</span>
                                     </label>
+                                    <label className={`flex flex-col items-center justify-center p-3 rounded-lg border cursor-pointer transition-all ${appType === 'external' ? 'bg-primary/20 border-primary text-white' : 'bg-slate-900 border-slate-700 text-gray-400 hover:bg-slate-800'}`}>
+                                        <input
+                                            type="radio"
+                                            name="appType"
+                                            value="external"
+                                            checked={appType === 'external'}
+                                            onChange={() => setAppType('external')}
+                                            className="hidden"
+                                        />
+                                        <span className="font-medium text-sm">App Externo</span>
+                                    </label>
                                 </div>
                             </div>
 
@@ -616,6 +629,17 @@ export const Dashboard: React.FC = () => {
                                             className="hidden"
                                         />
                                         <span className="font-medium text-sm">Link Útil</span>
+                                    </label>
+                                    <label className={`flex flex-col items-center justify-center p-3 rounded-lg border cursor-pointer transition-all ${editAppType === 'external' ? 'bg-primary/20 border-primary text-white' : 'bg-slate-900 border-slate-700 text-gray-400 hover:bg-slate-800'}`}>
+                                        <input
+                                            type="radio"
+                                            name="editAppType"
+                                            value="external"
+                                            checked={editAppType === 'external'}
+                                            onChange={() => setEditAppType('external')}
+                                            className="hidden"
+                                        />
+                                        <span className="font-medium text-sm">App Externo</span>
                                     </label>
                                 </div>
                             </div>

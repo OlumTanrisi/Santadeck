@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { UserPlus, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 interface AppData {
     id: string;
@@ -83,6 +84,7 @@ export const CreateUser: React.FC = () => {
             }
 
             setMessage({ type: 'success', text: 'Usuário criado com sucesso!' });
+            toast.success('Usuário criado com sucesso!');
             setEmail('');
             setPassword('');
             setFullName('');
@@ -92,6 +94,7 @@ export const CreateUser: React.FC = () => {
         } catch (error: any) {
             console.error('Error creating user:', error);
             setMessage({ type: 'error', text: error.message || 'Erro ao criar usuário' });
+            toast.error('Erro ao criar usuário: ' + error.message);
         } finally {
             setLoading(false);
         }

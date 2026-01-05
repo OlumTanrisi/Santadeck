@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Building2, ArrowLeft, Plus, Trash2, Edit2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 interface Department {
     id: string;
@@ -55,6 +56,7 @@ export const ManageDepartments: React.FC = () => {
             if (error) throw error;
 
             setMessage({ type: 'success', text: 'Setor adicionado com sucesso!' });
+            toast.success('Setor adicionado com sucesso!');
             setNewDepartmentName('');
             setShowAddModal(false);
             fetchDepartments();
@@ -79,6 +81,7 @@ export const ManageDepartments: React.FC = () => {
             if (error) throw error;
 
             setMessage({ type: 'success', text: 'Setor atualizado com sucesso!' });
+            toast.success('Setor atualizado com sucesso!');
             setEditingDepartment(null);
             setShowEditModal(false);
             fetchDepartments();
@@ -102,6 +105,7 @@ export const ManageDepartments: React.FC = () => {
             if (error) throw error;
 
             setMessage({ type: 'success', text: 'Setor excluído com sucesso!' });
+            toast.success('Setor excluído com sucesso!');
             fetchDepartments();
         } catch (error: any) {
             console.error('Error deleting department:', error);

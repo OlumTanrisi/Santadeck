@@ -147,11 +147,11 @@ npm install
 
 3. **Configure as variáveis de ambiente**
 
-Edite o arquivo `src/lib/supabase.ts` com suas credenciais do Supabase:
+Crie um arquivo `.env` na raiz do projeto com suas credenciais:
 
-```typescript
-const supabaseUrl = 'SUA_URL_DO_SUPABASE';
-const supabaseAnonKey = 'SUA_CHAVE_ANONIMA';
+```env
+VITE_SUPABASE_URL=SUA_URL_DO_SUPABASE
+VITE_SUPABASE_ANON_KEY=SUA_CHAVE_ANONIMA
 ```
 
 4. **Execute o projeto**
@@ -177,11 +177,19 @@ O aplicativo estará disponível em `http://localhost:5173`
 Execute os seguintes comandos SQL no editor SQL do Supabase:
 
 ```sql
+-- Tabela de setores
+CREATE TABLE departments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Tabela de perfis de usuários
 CREATE TABLE profiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
   full_name TEXT,
   role TEXT DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+  department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -196,6 +204,10 @@ CREATE TABLE apps (
   type TEXT DEFAULT 'web' CHECK (type IN ('web', 'link')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Atualização para suportar App Externo (Executar se a tabela já existir)
+-- ALTER TABLE apps DROP CONSTRAINT apps_type_check;
+-- ALTER TABLE apps ADD CONSTRAINT apps_type_check CHECK (type IN ('web', 'link', 'external'));
 
 -- Tabela de permissões de usuários por app
 CREATE TABLE user_app_permissions (
@@ -292,6 +304,41 @@ BEGIN
   
   -- Deletar o usuário da autenticação
   DELETE FROM auth.users WHERE id = target_user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Função para criar usuário por admin (contornando restrição de signup)
+CREATE OR REPLACE FUNCTION create_user_by_admin(
+  email TEXT,
+  password TEXT,
+  full_name TEXT,
+  user_role TEXT,
+  department_id UUID,
+  app_ids UUID[]
+) RETURNS void AS $$
+DECLARE
+  new_user_id UUID;
+BEGIN
+  -- Verificar admin
+  IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin') THEN
+    RAISE EXCEPTION 'Acesso negado';
+  END IF;
+
+  -- Criar no auth
+  INSERT INTO auth.users (email, password, email_confirmed_at, raw_user_meta_data)
+  VALUES (email, crypt(password, gen_salt('bf')), now(), jsonb_build_object('full_name', full_name, 'role', user_role))
+  RETURNING id INTO new_user_id;
+
+  -- Atualizar profile (trigger handle_new_user cria o perfil, aqui atualizamos o departamento)
+  UPDATE profiles 
+  SET department_id = create_user_by_admin.department_id 
+  WHERE id = new_user_id;
+
+  -- Inserir permissões
+  IF app_ids IS NOT NULL THEN
+    INSERT INTO user_app_permissions (user_id, app_id)
+    SELECT new_user_id, UNNEST(app_ids);
+  END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 ```

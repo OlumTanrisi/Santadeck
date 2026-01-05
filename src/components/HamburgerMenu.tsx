@@ -164,7 +164,7 @@ export const HamburgerMenu: React.FC = () => {
 
                     {/* Navegação - Itens do Menu */}
                     <nav className="space-y-2">
-                        {menuItems.filter(item => item.label !== 'Gerenciar Setores').map((item, index) => {
+                        {menuItems.map((item, index) => {
                             const Icon = item.icon;
                             return (
                                 <button

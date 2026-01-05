@@ -167,6 +167,8 @@ function AppRoutes() {
   );
 }
 
+import { Toaster } from 'react-hot-toast';
+
 /**
  * Componente App Principal
  * 
@@ -174,10 +176,12 @@ function AppRoutes() {
  * - AuthProvider: Fornece contexto de autenticação global
  * - Router: Habilita roteamento SPA
  * - AppRoutes: Define todas as rotas da aplicação
+ * - Toaster: Provê notificações toast globais
  */
 function App() {
   return (
     <AuthProvider>
+      <Toaster position="top-right" />
       <Router>
         <AppRoutes />
       </Router>

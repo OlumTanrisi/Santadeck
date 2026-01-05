@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { UserCog, ArrowLeft, Save } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 interface AppData {
     id: string;
@@ -86,6 +87,7 @@ export const EditUser: React.FC = () => {
         } catch (error: any) {
             console.error('Error fetching data:', error);
             setMessage({ type: 'error', text: 'Erro ao carregar dados do usuário.' });
+            toast.error('Erro ao carregar dados do usuário.');
         } finally {
             setLoading(false);
         }
@@ -141,9 +143,11 @@ export const EditUser: React.FC = () => {
             }
 
             setMessage({ type: 'success', text: 'Usuário atualizado com sucesso!' });
+            toast.success('Usuário atualizado com sucesso!');
         } catch (error: any) {
             console.error('Error updating user:', error);
             setMessage({ type: 'error', text: error.message || 'Erro ao atualizar usuário' });
+            toast.error('Erro ao atualizar usuário: ' + error.message);
         } finally {
             setSaving(false);
         }
