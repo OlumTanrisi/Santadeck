@@ -52,6 +52,7 @@ export const Dashboard: React.FC = () => {
     const [newAppDesc, setNewAppDesc] = useState('');
     const [newAppUrl, setNewAppUrl] = useState('');
     const [newAppIcon, setNewAppIcon] = useState('');
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [appType, setAppType] = useState<'web' | 'link' | 'external'>('web');
 
     // Estados do formulário de edição
@@ -61,6 +62,7 @@ export const Dashboard: React.FC = () => {
     const [editAppDesc, setEditAppDesc] = useState('');
     const [editAppUrl, setEditAppUrl] = useState('');
     const [editAppIcon, setEditAppIcon] = useState('');
+    const [editSelectedFile, setEditSelectedFile] = useState<File | null>(null);
     const [editAppType, setEditAppType] = useState<'web' | 'link' | 'external'>('web');
 
     // Estados do carrossel
@@ -95,6 +97,24 @@ export const Dashboard: React.FC = () => {
         }
     };
 
+    const uploadIcon = async (file: File) => {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+        const filePath = `icons/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from('app-icons')
+            .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage
+            .from('app-icons')
+            .getPublicUrl(filePath);
+
+        return data.publicUrl;
+    };
+
     const handleEditApp = (appId: string) => {
         const app = apps.find(a => a.id === appId);
         if (app) {
@@ -103,6 +123,7 @@ export const Dashboard: React.FC = () => {
             setEditAppDesc(app.description || '');
             setEditAppUrl(app.url);
             setEditAppIcon(app.icon_url || '');
+            setEditSelectedFile(null);
             setEditAppType((app.type as any) || 'web');
             setShowEditModal(true);
         }
@@ -116,13 +137,18 @@ export const Dashboard: React.FC = () => {
             // Buscar dados antigos antes de atualizar
             const oldApp = apps.find(a => a.id === editingAppId);
 
+            let iconUrl = editAppIcon;
+            if (editSelectedFile) {
+                iconUrl = await uploadIcon(editSelectedFile);
+            }
+
             const { error } = await supabase
                 .from('apps')
                 .update({
                     name: editAppName,
                     description: editAppDesc,
                     url: editAppUrl,
-                    icon_url: editAppIcon || null,
+                    icon_url: iconUrl || null,
                     type: editAppType
                 })
                 .eq('id', editingAppId);
@@ -148,7 +174,7 @@ export const Dashboard: React.FC = () => {
                             name: editAppName,
                             description: editAppDesc,
                             url: editAppUrl,
-                            icon_url: editAppIcon || null,
+                            icon_url: iconUrl || null,
                             type: editAppType
                         },
                         timestamp: new Date().toISOString()
@@ -162,6 +188,7 @@ export const Dashboard: React.FC = () => {
             setEditAppDesc('');
             setEditAppUrl('');
             setEditAppIcon('');
+            setEditSelectedFile(null);
             setEditAppType('web');
             fetchApps();
             toast.success('App atualizado com sucesso!');
@@ -221,11 +248,16 @@ export const Dashboard: React.FC = () => {
     const handleAddApp = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            let iconUrl = newAppIcon;
+            if (selectedFile) {
+                iconUrl = await uploadIcon(selectedFile);
+            }
+
             const { error } = await supabase.from('apps').insert([{
                 name: newAppName,
                 description: newAppDesc,
                 url: newAppUrl,
-                icon_url: newAppIcon || null,
+                icon_url: iconUrl || null,
                 type: appType
             }]);
 
@@ -241,7 +273,7 @@ export const Dashboard: React.FC = () => {
                         name: newAppName,
                         description: newAppDesc,
                         url: newAppUrl,
-                        icon_url: newAppIcon || null,
+                        icon_url: iconUrl || null,
                         type: appType,
                         timestamp: new Date().toISOString()
                     }
@@ -253,6 +285,7 @@ export const Dashboard: React.FC = () => {
             setNewAppDesc('');
             setNewAppUrl('');
             setNewAppIcon('');
+            setSelectedFile(null);
             setAppType('web');
             fetchApps();
             toast.success('App adicionado com sucesso!');
@@ -540,14 +573,60 @@ export const Dashboard: React.FC = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm text-gray-300 mb-1">URL do Ícone (Opcional)</label>
-                                <input
-                                    type="url"
-                                    value={newAppIcon}
-                                    onChange={e => setNewAppIcon(e.target.value)}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-primary focus:outline-none"
-                                    placeholder="https://..."
-                                />
+                                <label className="block text-sm text-gray-300 mb-2">Ícone do Aplicativo</label>
+                                <div
+                                    className="group relative w-full h-32 bg-slate-900 border-2 border-dashed border-slate-700 rounded-xl flex flex-col items-center justify-center transition-all hover:border-primary/50 hover:bg-slate-800/50 cursor-pointer overflow-hidden"
+                                    onClick={() => document.getElementById('new-icon-upload')?.click()}
+                                >
+                                    {selectedFile || newAppIcon ? (
+                                        <div className="flex flex-col items-center gap-2">
+                                            <img
+                                                src={selectedFile ? URL.createObjectURL(selectedFile) : newAppIcon}
+                                                className="w-16 h-16 object-contain rounded-lg shadow-lg"
+                                                alt="Preview"
+                                            />
+                                            <span className="text-xs text-gray-400 truncate max-w-[200px]">
+                                                {selectedFile ? selectedFile.name : 'Ícone por URL'}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedFile(null);
+                                                    setNewAppIcon('');
+                                                }}
+                                                className="absolute top-2 right-2 p-1 bg-red-500/80 rounded-full text-white hover:bg-red-600 transition-colors"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col items-center gap-2 text-gray-500 group-hover:text-primary transition-colors text-center px-4">
+                                            <Plus size={32} />
+                                            <span className="text-sm font-medium">Clique para subir PNG</span>
+                                            <span className="text-xs text-gray-600">ou arraste um arquivo aqui</span>
+                                        </div>
+                                    )}
+                                    <input
+                                        id="new-icon-upload"
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp"
+                                        onChange={e => setSelectedFile(e.target.files?.[0] || null)}
+                                        className="hidden"
+                                    />
+                                </div>
+                                {!selectedFile && !newAppIcon && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const url = window.prompt('Insira a URL do ícone:');
+                                            if (url) setNewAppIcon(url);
+                                        }}
+                                        className="mt-2 text-xs text-primary hover:underline"
+                                    >
+                                        Preferir usar uma URL externa?
+                                    </button>
+                                )}
                             </div>
 
                             <div className="pt-4 flex justify-end gap-3">
@@ -659,14 +738,60 @@ export const Dashboard: React.FC = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm text-gray-300 mb-1">URL do Ícone (Opcional)</label>
-                                <input
-                                    type="url"
-                                    value={editAppIcon}
-                                    onChange={e => setEditAppIcon(e.target.value)}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-primary focus:outline-none"
-                                    placeholder="https://..."
-                                />
+                                <label className="block text-sm text-gray-300 mb-2">Ícone do Aplicativo</label>
+                                <div
+                                    className="group relative w-full h-32 bg-slate-900 border-2 border-dashed border-slate-700 rounded-xl flex flex-col items-center justify-center transition-all hover:border-primary/50 hover:bg-slate-800/50 cursor-pointer overflow-hidden"
+                                    onClick={() => document.getElementById('edit-icon-upload')?.click()}
+                                >
+                                    {editSelectedFile || editAppIcon ? (
+                                        <div className="flex flex-col items-center gap-2">
+                                            <img
+                                                src={editSelectedFile ? URL.createObjectURL(editSelectedFile) : editAppIcon}
+                                                className="w-16 h-16 object-contain rounded-lg shadow-lg"
+                                                alt="Preview"
+                                            />
+                                            <span className="text-xs text-gray-400 truncate max-w-[200px]">
+                                                {editSelectedFile ? editSelectedFile.name : 'Ícone atual'}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setEditSelectedFile(null);
+                                                    setEditAppIcon('');
+                                                }}
+                                                className="absolute top-2 right-2 p-1 bg-red-500/80 rounded-full text-white hover:bg-red-600 transition-colors"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col items-center gap-2 text-gray-500 group-hover:text-primary transition-colors text-center px-4">
+                                            <Plus size={32} />
+                                            <span className="text-sm font-medium">Clique para subir PNG</span>
+                                            <span className="text-xs text-gray-600">ou arraste um arquivo aqui</span>
+                                        </div>
+                                    )}
+                                    <input
+                                        id="edit-icon-upload"
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp"
+                                        onChange={e => setEditSelectedFile(e.target.files?.[0] || null)}
+                                        className="hidden"
+                                    />
+                                </div>
+                                {!editSelectedFile && !editAppIcon && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const url = window.prompt('Insira a URL do ícone:');
+                                            if (url) setEditAppIcon(url);
+                                        }}
+                                        className="mt-2 text-xs text-primary hover:underline"
+                                    >
+                                        Preferir usar uma URL externa?
+                                    </button>
+                                )}
                             </div>
 
                             <div className="pt-4 flex justify-end gap-3">
