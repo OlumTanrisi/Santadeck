@@ -13,7 +13,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { destroyBFFSession } from '../lib/bff-session';
+
 
 /**
  * Interface que define o tipo do contexto de autenticação
@@ -57,85 +57,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [role, setRole] = useState<'admin' | 'user' | null>(null);
     const [loading, setLoading] = useState(true);
 
-    /**
-     * Effect que roda uma vez ao montar o componente
-     * Busca a sessão inicial e configura listener de mudanças de autenticação
-     */
-    useEffect(() => {
-        // Buscar sessão inicial
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-            setUser(session?.user ?? null);
-            if (session?.user) {
-                fetchUserRole(session.user.id);
-            } else {
-                setLoading(false);
-            }
-        });
-
-        // Configurar listener para mudanças de autenticação
-        // Isso detecta login, logout, refresh de token, etc.
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
-            setUser(session?.user ?? null);
-            if (session?.user) {
-                fetchUserRole(session.user.id);
-            } else {
-                setRole(null);
-                setLoading(false);
-            }
-        });
-
-        // Cleanup: cancelar subscription ao desmontar
-        return () => subscription.unsubscribe();
-    }, []);
-
-    /**
-     * Verifica a validade da sessão atual
-     * 
-     * Checa apenas se o usuário ainda está ativo
-     * (A verificação de sessão única agora é feita no login)
-     */
-    const checkSessionValidity = async () => {
+    const checkSession = async () => {
         try {
-            const { data: { user: currentUser }, error } = await supabase.auth.getUser();
+            // Fetch session from Auth Gateway (proxied via Nginx /auth/session)
+            // Note: credentials: 'include' is crucial for sending the cookie
+            const res = await fetch('/auth/session', {
+                headers: { 'Accept': 'application/json' },
+                credentials: 'include'
+            });
 
-            if (error || !currentUser) return;
+            if (res.ok) {
+                const data = await res.json();
 
-            // Verificar se conta está ativa
-            const { data: profile, error: profileError } = await supabase
-                .from('profiles')
-                .select('is_active')
-                .eq('id', currentUser.id)
-                .single();
+                // 1. Sync with local Supabase client FIRST
+                if (data.supabaseAccessToken) {
+                    const { error: syncError } = await supabase.auth.setSession({
+                        access_token: data.supabaseAccessToken,
+                        refresh_token: data.session?.refresh_hash || ''
+                    });
+                    if (syncError) console.error('Supabase sync error:', syncError);
+                    else console.log('✅ Supabase client synchronized');
+                }
 
-            if (profileError) {
-                console.error('Erro ao buscar perfil:', profileError);
-                return;
+                // 2. Then update global state
+                setSession(data.session);
+                setUser(data.user);
+
+                if (data.user) fetchUserRole(data.user.id);
+            } else {
+                // 401 or 403
+                setSession(null);
+                setUser(null);
+                setRole(null);
             }
-
-            if (profile && profile.is_active === false) {
-                console.log('⚠️ Usuário inativo - forçando logout');
-                localStorage.setItem('login_message', 'Sua conta foi inativada pelo administrador.');
-                await signOut();
-            }
-
-        } catch (err) {
-            console.error('Erro ao verificar validade da sessão:', err);
+        } catch (error) {
+            console.error('Failed to check session', error);
+            setSession(null);
+            setUser(null);
+        } finally {
+            setLoading(false);
         }
     };
 
-    // Configurar verificação periódica de conta ativa
+    /**
+     * Effect que roda uma vez ao montar o componente
+     */
     useEffect(() => {
-        // Verificar a cada 30 segundos se a conta ainda está ativa
-        const interval = setInterval(() => {
-            if (session) {
-                checkSessionValidity();
-            }
-        }, 30000);
-
+        checkSession();
+        // Setup simple polling for session validity? or rely on user action failure?
+        // Let's poll every minute
+        const interval = setInterval(checkSession, 60000);
         return () => clearInterval(interval);
-    }, [session]);
+    }, []);
+
 
     /**
      * Busca a role (função) do usuário no banco de dados
@@ -159,68 +133,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (err) {
             console.error('Error in fetchUserRole:', err);
             setRole('user');
-        } finally {
-            setLoading(false);
         }
     };
 
     /**
      * Função de Logout
-     * 
-     * Realiza as seguintes ações:
-     * 1. Limpa a sessão no banco de dados
-     * 2. Registra log de logout no banco
-     * 3. Limpa sessão do BFF (cookie HttpOnly para apps secundários)
-     * 4. Limpa localStorage
-     * 5. Faz logout no Supabase
-     * 6. Limpa estados locais
      */
     const signOut = async () => {
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                // 1. Limpar current_session_id no banco (permite novo login)
-                await supabase
-                    .from('profiles')
-                    .update({ current_session_id: null })
-                    .eq('id', user.id);
+            await fetch('/auth/logout', {
+                method: 'POST',
+                credentials: 'include'
+            });
 
-                console.log('✅ Sessão limpa no banco de dados');
+            // Clear local Supabase session too
+            await supabase.auth.signOut();
 
-                // 2. Registrar log de logout
-                await supabase.from('activity_logs').insert({
-                    user_id: user.id,
-                    action: 'user_logout',
-                    app_id: null,
-                    app_name: null,
-                    details: {
-                        timestamp: new Date().toISOString()
-                    }
-                });
-            }
-        } catch (logError) {
-            console.error('Error during logout:', logError);
+            setUser(null);
+            setSession(null);
+            setRole('user');
+            localStorage.setItem('login_message', 'Sessão encerrada com sucesso.');
+            window.location.href = '/login';
+        } catch (err) {
+            console.error('Logout error:', err);
         }
-
-        // 3. Destruir sessão do BFF (cookie HttpOnly para apps secundários)
-        try {
-            await destroyBFFSession();
-            console.log('✅ Sessão BFF destruída');
-        } catch (bffError) {
-            console.error('Erro ao destruir sessão BFF:', bffError);
-            // Não bloqueia o logout principal
-        }
-
-        // 4. Limpar localStorage
-        localStorage.removeItem('santadeck_session_id');
-
-        // 5. Fazer logout no Supabase
-        await supabase.auth.signOut();
-
-        // 6. Limpar estados locais
-        setRole(null);
-        setSession(null);
-        setUser(null);
     };
 
     return (

@@ -5,15 +5,12 @@
  * Permite que usuários façam login com email e senha.
  * Registra a atividade de login no banco de dados.
  * 
- * ATUALIZADO: Agora também cria sessão no BFF para apps secundários
- * e suporta redirect de volta para apps como /inventario após login.
+ * ATUALIZADO: Suporta redirect de volta para apps como /inventario após login.
  */
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { useNavigate } from 'react-router-dom';
 import logo from '../assets/logo.png';
-import { createBFFSession, getRedirectPath } from '../lib/bff-session';
+
 
 /**
  * Componente Login
@@ -32,7 +29,7 @@ export const Login: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const navigate = useNavigate();
+
 
     // Verifica mensagens de erro persistidas no localStorage
     useEffect(() => {
@@ -73,135 +70,36 @@ export const Login: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        // Limpar mensagens residuais de sessões anteriores
+        // Limpar mensagens residuais
         localStorage.removeItem('login_message');
 
         try {
-            // 1. Tentar fazer login com Supabase Auth
-            const { data, error } = await supabase.auth.signInWithPassword({
-                email,
-                password,
+            // Chamada ao Auth Gateway (Nginx proxy -> auth-service)
+            // Credentials: 'include' é fundamental para receber os cookies HttpOnly (sid, rt)
+            const response = await fetch('/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email, password }),
+                credentials: 'include'
             });
 
-            if (error) throw error;
+            const data = await response.json();
 
-            if (data.user) {
-                // 2. Verificar se o usuário está ativo e se já tem sessão ativa
-                const { data: profile, error: profileError } = await supabase
-                    .from('profiles')
-                    .select('is_active, current_session_id')
-                    .eq('id', data.user.id)
-                    .single();
+            if (!response.ok) {
+                throw new Error(data.error || 'Falha na autenticação');
+            }
 
-                console.log('📋 DEBUG - Profile:', profile);
-                console.log('📋 DEBUG - current_session_id:', profile?.current_session_id);
-                console.log('📋 DEBUG - Erro perfil:', profileError);
+            console.log('✅ Login realizado via Auth Gateway');
+            // Verificar redirect da URL (suportado pelo gateway)
+            const params = new URLSearchParams(window.location.search);
+            const returnUrl = params.get('return');
 
-                if (profileError) {
-                    console.error('Erro ao verificar perfil:', profileError);
-                }
-
-                // Verificar se conta está inativa
-                if (profile && profile.is_active === false) {
-                    setError('Sua conta está inativa. Entre em contato com o administrador.');
-                    await supabase.auth.signOut();
-                    setLoading(false);
-                    return;
-                }
-
-                // 3. Verificar Sessão Única - BLOQUEAR se já está logado em outro dispositivo
-                if (profile && profile.current_session_id) {
-                    console.log('⚠️ BLOQUEANDO - Conta já possui sessão ativa:', profile.current_session_id);
-                    // Salvar mensagem ANTES do signOut (para persistir em caso de re-render)
-                    localStorage.setItem('login_message', '⚠️ Esta conta já está conectada em outro dispositivo. Faça logout no outro dispositivo para continuar.');
-                    // Cancelar apenas esta sessão local (não afeta outros dispositivos)
-                    await supabase.auth.signOut({ scope: 'local' });
-                    // Também tentar setar diretamente
-                    setError('⚠️ Esta conta já está conectada em outro dispositivo. Faça logout no outro dispositivo para continuar.');
-                    setLoading(false);
-                    return;
-                }
-
-                console.log('✅ Nenhuma sessão ativa encontrada, prosseguindo com login...');
-
-                // 4. Se não tem sessão ativa, criar uma nova
-                const generateUUID = () => {
-                    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-                        const r = Math.random() * 16 | 0;
-                        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-                        return v.toString(16);
-                    });
-                };
-                const sessionId = generateUUID();
-                console.log('🔐 Novo Session ID gerado:', sessionId);
-
-                // Salvar sessão no banco de dados
-                const { error: updateError } = await supabase
-                    .from('profiles')
-                    .update({ current_session_id: sessionId })
-                    .eq('id', data.user.id);
-
-                if (updateError) {
-                    console.error('❌ Erro ao salvar sessão:', updateError);
-                } else {
-                    console.log('✅ Session ID salvo no banco de dados');
-                }
-
-                // Salvar no localStorage
-                localStorage.setItem('santadeck_session_id', sessionId);
-                console.log('💾 Session ID salvo no localStorage');
-
-                // 5. Registrar log de atividade
-                const { error: logError } = await supabase.from('activity_logs').insert({
-                    user_id: data.user.id,
-                    action: 'user_login',
-                    app_id: null,
-                    app_name: null,
-                    details: {
-                        email: data.user.email,
-                        timestamp: new Date().toISOString(),
-                        session_id: sessionId
-                    }
-                });
-
-                if (logError) {
-                    console.error('❌ Erro ao registrar log de login:', logError);
-                } else {
-                    console.log('✅ Log de login registrado com sucesso');
-                }
-
-                // 6. Criar sessão no BFF para apps secundários
-                // Isso cria o cookie HttpOnly que será usado por Inventário, CRM, etc.
-                try {
-                    const accessToken = data.session?.access_token;
-                    if (accessToken) {
-                        const bffResult = await createBFFSession(
-                            data.user.id,
-                            data.user.email || '',
-                            accessToken
-                        );
-                        if (bffResult.success) {
-                            console.log('✅ Sessão BFF criada com sucesso');
-                        } else {
-                            console.warn('⚠️ Falha ao criar sessão BFF:', bffResult.error);
-                            // Não bloqueia o login, apenas loga o erro
-                        }
-                    }
-                } catch (bffError) {
-                    console.error('❌ Erro ao criar sessão BFF:', bffError);
-                    // Não bloqueia o login principal
-                }
-
-                // 7. Verificar se há redirect para app secundário (ex: /inventario)
-                const redirectPath = getRedirectPath();
-                if (redirectPath) {
-                    console.log('🔄 Redirecionando para app secundário:', redirectPath);
-                    window.location.href = redirectPath;
-                } else {
-                    // 8. Redireciona para dashboard (comportamento padrão)
-                    console.log('🚀 Redirecionando para dashboard...');
-                    navigate('/dashboard');
-                }
+            if (returnUrl) {
+                window.location.href = returnUrl;
+            } else {
+                window.location.href = '/dashboard';
             }
         } catch (error: any) {
             console.error('Login error:', error);

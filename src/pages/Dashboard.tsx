@@ -18,6 +18,7 @@ import { AppCard } from '../components/AppCard';
 import { Plus, X, ExternalLink, Link as LinkIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
+import { logActivity } from '../lib/activity';
 
 /**
  * Interface que define a estrutura de dados de um aplicativo
@@ -442,6 +443,11 @@ export const Dashboard: React.FC = () => {
                                         href={link.url}
                                         target="_blank"
                                         rel="noopener noreferrer"
+                                        onClick={() => {
+                                            if (user) {
+                                                logActivity(user.id, 'app_opened', link.id, link.name, { type: 'link' });
+                                            }
+                                        }}
                                         className="block bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-primary/50 rounded-lg p-4 transition-all hover:-translate-y-1 hover:shadow-lg h-full"
                                     >
                                         <div className="flex items-center gap-3 mb-2">

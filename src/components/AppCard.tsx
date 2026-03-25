@@ -12,6 +12,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Trash2, Edit2 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { logActivity } from '../lib/activity';
 
 /**
  * Interface que define os dados de um aplicativo
@@ -52,11 +54,16 @@ interface AppCardProps {
  */
 export const AppCard: React.FC<AppCardProps> = ({ app, isAdmin, onDelete, onEdit }) => {
     const navigate = useNavigate();
+    const { user } = useAuth();
 
     /**
      * Navega para a página de lançamento do aplicativo
      */
     const handleCardClick = () => {
+        if (user) {
+            logActivity(user.id, 'app_opened', app.id, app.name, { type: app.type });
+        }
+
         if (app.type === 'external') {
             window.open(app.url, '_blank');
         } else {
